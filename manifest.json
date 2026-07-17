@@ -1,0 +1,9 @@
+{
+    "id": "missed-connections",
+    "name": "Missed Connections",
+    "description": "Highlights any tracks that are not connected to another track or station with a red X.",
+    "version": "1.0.0",
+    "dependencies": { "subway-builder": ">=1.0.0" },
+    "author": { "name": "slurry" },
+    "main": "index.js"
+}
