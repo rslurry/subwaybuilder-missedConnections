@@ -1,5 +1,4 @@
 const missedConnections = {
-    CONNECTION_THRESHOLD_METERS: 0.5,
     initialized: false,
     _tickTimeout: null,
     visible: false,
@@ -224,7 +223,6 @@ const missedConnections = {
     checkTracks() {
         const api = window.SubwayBuilderAPI;
         const tracks = api.gameState.getTracks();
-        const stations = api.gameState.getStations();
 
         if (!tracks || tracks.length === 0) {
             this.geojson.features = [];
@@ -232,48 +230,46 @@ const missedConnections = {
             return;
         }
 
+        // Helper to stringify coordinates for Map keys.
+        // Rounding to 6 decimal places fixes floating-point precision issues.
+        const getPointKey = (pt) => {
+            const x = pt.x !== undefined ? pt.x : pt[0];
+            const y = pt.y !== undefined ? pt.y : pt[1];
+            return `${x.toFixed(6)},${y.toFixed(6)}`;
+        };
+
+        const endpointCounts = new Map();
+        const trackEndpoints = [];
+
+        // Pass 1: Gather endpoints and count their occurrences
+        for (let i = 0; i < tracks.length; i++) {
+            const track = tracks[i];
+            const start = track.coords[0];
+            const end = track.coords[track.coords.length - 1];
+
+            if (!start || !end) continue;
+
+            const startKey = getPointKey(start);
+            const endKey = getPointKey(end);
+
+            endpointCounts.set(startKey, (endpointCounts.get(startKey) || 0) + 1);
+            endpointCounts.set(endKey, (endpointCounts.get(endKey) || 0) + 1);
+
+            // Store references to check in the second pass
+            trackEndpoints.push({ start, startKey, end, endKey });
+        }
+
         const unconnectedEndpoints = [];
 
-        for (let i = 0; i < tracks.length; i++) {
-            const currentTrack = tracks[i];
-            
-            const currentStart = currentTrack.coords[0];
-            const currentEnd = currentTrack.coords[currentTrack.coords.length - 1];
+        // Pass 2: Identify endpoints that only appear exactly once
+        for (let i = 0; i < trackEndpoints.length; i++) {
+            const { start, startKey, end, endKey } = trackEndpoints[i];
 
-            if (!currentStart || !currentEnd) {
-                continue;
+            if (endpointCounts.get(startKey) === 1) {
+                unconnectedEndpoints.push(start);
             }
-
-            let startIsConnected = false;
-            let endIsConnected = false;
-
-            // Check connections to other tracks
-            for (let j = 0; j < tracks.length; j++) {
-                if (i === j) continue;
-
-                const otherTrack = tracks[j];
-                const otherStart = otherTrack.coords[0];
-                const otherEnd = otherTrack.coords[otherTrack.coords.length - 1];
-
-                if (!otherStart || !otherEnd) continue;
-
-                if (!startIsConnected && (this.arePointsConnected(currentStart, otherStart) || this.arePointsConnected(currentStart, otherEnd))) {
-                    startIsConnected = true;
-                }
-
-                if (!endIsConnected && (this.arePointsConnected(currentEnd, otherStart) || this.arePointsConnected(currentEnd, otherEnd))) {
-                    endIsConnected = true;
-                }
-
-                if (startIsConnected && endIsConnected) break;
-            }
-
-            // Record dangling endpoints
-            if (!startIsConnected) {
-                unconnectedEndpoints.push(currentStart);
-            }
-            if (!endIsConnected) {
-                unconnectedEndpoints.push(currentEnd);
+            if (endpointCounts.get(endKey) === 1) {
+                unconnectedEndpoints.push(end);
             }
         }
 
@@ -353,7 +349,7 @@ const missedConnections = {
     },
 
     arePointsConnected(p1, p2) {
-        return this.haversineDistance(p1, p2) < this.CONNECTION_THRESHOLD_METERS;
+        return p1.every((val, index) => val === p2[index]);
     }
 };
 
